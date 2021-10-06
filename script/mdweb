@@ -82,7 +82,7 @@ __DATA__
       }
       code, pre { background: #fafafa; }
       code { padding: 1px; }
-      li > code,
+#      li > code,
       p > code {
         font-weight: 600;
         outline: 1px dotted #bbb;
