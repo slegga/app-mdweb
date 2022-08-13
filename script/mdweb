@@ -4,9 +4,20 @@ use Mojolicious::Lite;
 use Mojo::File 'path';
 use Mojo::Util 'decode';
 use Text::MultiMarkdown ();
+use YAML::Syck;
+use Mojo::Base -strict, -signatures;
+use List::MoreUtils qw/firstidx/;
+
+$YAML::Syck::ImplicitUnicode=1;
+$YAML::Syck::SingleQuote=1;
 
 my $HOME = $ENV{MDWEB_HOME} || Cwd::getcwd;
-
+my $config;
+my $configfile = "$HOME/mdweb.yml";
+if (-f $configfile) {
+    open my $fh, "<:encoding(UTF-8)",$configfile;
+    $config = LoadFile($fh);
+}
 get '/*sub_dir', {sub_dir => ''} => sub {
   my $c       = shift;
   my $sub_dir = $c->stash('sub_dir');
@@ -24,7 +35,7 @@ get '/*sub_dir', {sub_dir => ''} => sub {
   }
   else {
     opendir my $DH, $fs_path or die "opendir $fs_path: $!";
-    my @files = grep { $_->[0] =~ /\.(markdown|md)$/i or $_->[1] }
+    my @files = sort {myorder($a->[0]) <=> myorder($b->[0]) } grep { $_->[0] =~ /\.(markdown|md)$/i or $_->[1] }
       map { [$_, -d path($fs_path, $_) ? 1 : 0] } grep { !/^\./ } readdir $DH;
     $c->render(template => 'browser', web_dir => $web_dir->to_abs_string, files => \@files);
   }
@@ -33,6 +44,22 @@ get '/*sub_dir', {sub_dir => ''} => sub {
 my @args = @ARGV;
 push @args, qw(--listen http://localhost:9009) if @args == 1 and $args[0] eq 'daemon';
 app->start(@args);
+
+sub myorder($value) {
+    return 1 if ! $config || (!$config->{order_first} && ! $config->{order_last} );
+    return 100000 if ! defined $value;
+    my ($f,$l,$order);
+    $f = firstidx {$value eq $_} @{ $config->{order_first} } if $config->{order_first};
+    $l = firstidx {$value eq $_} @{ $config->{order_last } } if $config->{order_last };
+    if ( defined $f && $f >= 0  ) {
+        $order = $f;
+    } elsif (defined $l && $l >= 0 ) {
+        $order = 20000 + $l;
+    } else {
+        $order = 10000;
+    }
+    return $order;
+}
 
 sub read_md {
   my $md = shift->slurp;
